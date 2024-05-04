@@ -47,7 +47,7 @@ Data required for retargeting are stored in a retarget config dictionary as a js
   - scale: scale offset from source to target skeleton
 """
 
-VISUALIZE = False
+VISUALIZE = True
 
 def project_joints(motion):
     right_upper_arm_id = motion.skeleton_tree._node_indices["right_upper_arm"]
@@ -205,7 +205,7 @@ def project_joints(motion):
 
 def main():
     # load retarget config
-    retarget_data_path = "data/configs/retarget_cmu_to_amp.json"
+    retarget_data_path = "data/amass/configs/retarget_amass_to_amp.json"
     with open(retarget_data_path) as f:
         retarget_data = json.load(f)
 
