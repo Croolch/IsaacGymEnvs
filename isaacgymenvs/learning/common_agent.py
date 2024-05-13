@@ -130,7 +130,7 @@ class CommonAgent(a2c_continuous.A2CAgent):
 
         while True:
             epoch_num = self.update_epoch()
-            train_info = self.train_epoch()
+            train_info = self.train_epoch() # 训练policy 
 
             sum_time = train_info['total_time']
             total_time += sum_time

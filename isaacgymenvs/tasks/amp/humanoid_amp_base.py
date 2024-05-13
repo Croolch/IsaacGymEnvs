@@ -453,6 +453,19 @@ class HumanoidAMPBase(VecTask):
 
     def _update_debug_viz(self):
         self.gym.clear_lines(self.viewer)
+        # draw contact forces
+        lines = []
+        colors = []
+        for i in range(1):
+            for j in range(self.num_bodies):
+                contact_force = self._contact_forces[i, j]
+                if (contact_force.norm() > 0.1):
+                    body_pose = self._rigid_body_pos[i, j].cpu().numpy()
+                    points = [body_pose, body_pose + 0.1 * contact_force.cpu().numpy()]
+                    lines.append(points)
+                    colors.append([1.0, 0.0, 0.0])
+        
+        self.gym.add_lines(self.viewer, None, len(lines), lines, colors)
         return
 
 #####################################################################
@@ -533,7 +546,7 @@ def compute_humanoid_reward(obs_buf):
     reward = torch.ones_like(obs_buf[:, 0])
     return reward
 
-@torch.jit.script
+# @torch.jit.script
 def compute_humanoid_reset(reset_buf, progress_buf, contact_buf, contact_body_ids, rigid_body_pos,
                            max_episode_length, enable_early_termination, termination_height):
     # type: (Tensor, Tensor, Tensor, Tensor, Tensor, float, bool, float) -> Tuple[Tensor, Tensor]
@@ -556,6 +569,8 @@ def compute_humanoid_reset(reset_buf, progress_buf, contact_buf, contact_body_id
         # so only check after first couple of steps
         has_fallen *= (progress_buf > 1)
         terminated = torch.where(has_fallen, torch.ones_like(reset_buf), terminated)
+        if terminated[0] == True:
+            print("env 0 reset!")
     
     reset = torch.where(progress_buf >= max_episode_length - 1, torch.ones_like(reset_buf), terminated)
 

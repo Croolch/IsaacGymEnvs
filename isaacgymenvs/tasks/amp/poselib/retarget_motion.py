@@ -235,6 +235,7 @@ def main():
       rotation_to_target_skeleton=rotation_to_target_skeleton,
       scale_to_target_skeleton=retarget_data["scale"]
     )
+    # plot_skeleton_motion_interactive(target_motion)
 
     # keep frames between [trim_frame_beg, trim_frame_end - 1]
     frame_beg = retarget_data["trim_frame_beg"]

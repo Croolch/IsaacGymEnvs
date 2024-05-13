@@ -205,7 +205,7 @@ class AMPAgent(common_agent.CommonAgent):
             frames_mask_ratio = rnn_masks.sum().item() / (rnn_masks.nelement())
             print(frames_mask_ratio)
 
-        for _ in range(0, self.mini_epochs_num):
+        for _ in range(0, self.mini_epochs_num): # 在训练什么？
             ep_kls = []
             for i in range(len(self.dataset)):
                 curr_train_info = self.train_actor_critic(self.dataset[i])
