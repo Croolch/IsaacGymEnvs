@@ -19,7 +19,8 @@ env:
   numAMPObsSteps: 2 # history and current observation
 
   localRootObs: False
-  contactBodies: ["left_finger", "right_finger", "left_toe", "right_toe"]
+  # contactBodies: ["left_finger", "right_finger", "left_toe", "right_toe"]
+  contactBodies: ["LeftFinger", "RightFinger", "LeftToe", "RightToe"]
   terminationHeight: 0.05
   enableEarlyTermination: True
 
@@ -34,7 +35,8 @@ env:
   #motion_file: "amp_humanoid_backflip.npy"
 
   asset:
-    assetFileName: "mjcf/dog.xml"
+    # assetFileName: "mjcf/dog.xml"
+    assetFileName: "mjcf/armature.xml"
 
   plane:
     staticFriction: 1.0

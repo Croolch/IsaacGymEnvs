@@ -43,7 +43,9 @@ from isaacgymenvs.tasks.amp.utils_amp.motion_lib import MotionLib
 from isaacgymenvs.utils.torch_jit_utils import quat_mul, to_torch, calc_heading_quat_inv, quat_to_tan_norm, my_quat_rotate
 
 
-NUM_AMP_OBS_PER_STEP = 13 + 112 + 58 + 12 # [root_h, root_rot, root_vel, root_ang_vel, dof_pos, dof_vel, key_body_pos]
+# NUM_AMP_OBS_PER_STEP = 13 + 112 + 58 + 12 # [root_h, root_rot, root_vel, root_ang_vel, dof_pos, dof_vel, key_body_pos]
+from .amp.dog_amp_base import NUM_OBS
+NUM_AMP_OBS_PER_STEP = NUM_OBS
 
 
 class HumanoidAMPDog(DogAMPBase):

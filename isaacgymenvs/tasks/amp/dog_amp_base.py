@@ -9,12 +9,16 @@ from isaacgymenvs.utils.torch_jit_utils import quat_mul, to_torch, get_axis_para
 
 from ..base.vec_task import VecTask
 
-DOF_BODY_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
-DOF_OFFSETS = [0, 3, 6, 9, 12, 15, 16, 19, 22, 25, 26, 29, 32, 35, 36, 39, 42, 45, 46, 49, 52, 55, 58]
-NUM_OBS = 13 + 112 + 58 + 12 # [root_h, root_rot, root_vel, root_ang_vel, dof_pos, dof_vel, key_body_pos]
-NUM_ACTIONS = 58
+# DOF_BODY_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
+# DOF_OFFSETS = [0, 3, 6, 9, 12, 15, 16, 19, 22, 25, 26, 29, 32, 35, 36, 39, 42, 45, 46, 49, 52, 55, 58]
+# NUM_OBS = 13 + 112 + 58 + 12 # [root_h, root_rot, root_vel, root_ang_vel, dof_pos, dof_vel, key_body_pos]
+# NUM_ACTIONS = 58
+DOF_BODY_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
+DOF_OFFSETS = [0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42, 45, 48, 51, 54, 57, 60, 63, 66, 69, 72]
+NUM_OBS = 13 + 144 + 72 + 12 # [root_h, root_rot6, root_vel, root_ang_vel, dof_pos, dof_vel, key_body_pos]
+NUM_ACTIONS = 72 # dof_num
 
-KEY_BODY_NAMES = ["right_finger", "left_finger", "right_toe", "left_toe"]
+KEY_BODY_NAMES = ["RightFinger", "LeftFinger", "RightToe", "LeftToe"]
 
 class DogAMPBase(VecTask):
 
@@ -52,7 +56,7 @@ class DogAMPBase(VecTask):
         rigid_body_state = self.gym.acquire_rigid_body_state_tensor(self.sim)
         contact_force_tensor = self.gym.acquire_net_contact_force_tensor(self.sim)
 
-        sensors_per_env = 2
+        sensors_per_env = 4
         self.vec_sensor_tensor = gymtorch.wrap_tensor(sensor_tensor).view(self.num_envs, sensors_per_env * 6)
 
         dof_force_tensor = self.gym.acquire_dof_force_tensor(self.sim)
@@ -161,10 +165,14 @@ class DogAMPBase(VecTask):
         motor_efforts = [prop.motor_effort for prop in actuator_props]
         
         # create force sensors at the feet
-        right_foot_idx = self.gym.find_asset_rigid_body_index(dog_asset, "right_toe")
-        left_foot_idx = self.gym.find_asset_rigid_body_index(dog_asset, "left_toe")
+        right_finger_idx = self.gym.find_asset_rigid_body_index(dog_asset, "RightFinger")
+        left_finger_idx = self.gym.find_asset_rigid_body_index(dog_asset, "LeftFinger")
+        right_foot_idx = self.gym.find_asset_rigid_body_index(dog_asset, "RightToe")
+        left_foot_idx = self.gym.find_asset_rigid_body_index(dog_asset, "LeftToe")
         sensor_pose = gymapi.Transform()
 
+        self.gym.create_asset_force_sensor(dog_asset, right_finger_idx, sensor_pose)
+        self.gym.create_asset_force_sensor(dog_asset, left_finger_idx, sensor_pose)
         self.gym.create_asset_force_sensor(dog_asset, right_foot_idx, sensor_pose)
         self.gym.create_asset_force_sensor(dog_asset, left_foot_idx, sensor_pose)
 
@@ -432,12 +440,12 @@ class DogAMPBase(VecTask):
 @torch.jit.script
 def dof_to_obs(pose):
     # type: (Tensor) -> Tensor
-    #dof_obs_size = 64
-    #dof_offsets = [0, 3, 6, 9, 12, 13, 16, 19, 20, 23, 24, 27, 30, 31, 34]
     # dof_obs_size = 52
     # dof_offsets = [0, 3, 6, 9, 10, 13, 14, 17, 18, 21, 24, 25, 28]
-    dof_obs_size = 112
-    dof_offsets = [0, 3, 6, 9, 12, 15, 16, 19, 22, 25, 26, 29, 32, 35, 36, 39, 42, 45, 46, 49, 52, 55, 58]
+    # dof_obs_size = 112
+    # dof_offsets = [0, 3, 6, 9, 12, 15, 16, 19, 22, 25, 26, 29, 32, 35, 36, 39, 42, 45, 46, 49, 52, 55, 58]
+    dof_obs_size = 144
+    dof_offsets = [0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42, 45, 48, 51, 54, 57, 60, 63, 66, 69, 72]
     num_joints = len(dof_offsets) - 1
 
     dof_obs_shape = pose.shape[:-1] + (dof_obs_size,)
