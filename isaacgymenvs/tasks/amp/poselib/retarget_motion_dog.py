@@ -1,31 +1,3 @@
-# Copyright (c) 2018-2023, NVIDIA Corporation
-# All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met:
-#
-# 1. Redistributions of source code must retain the above copyright notice, this
-#    list of conditions and the following disclaimer.
-#
-# 2. Redistributions in binary form must reproduce the above copyright notice,
-#    this list of conditions and the following disclaimer in the documentation
-#    and/or other materials provided with the distribution.
-#
-# 3. Neither the name of the copyright holder nor the names of its
-#    contributors may be used to endorse or promote products derived from
-#    this software without specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 from isaacgymenvs.utils.torch_jit_utils import quat_mul, quat_from_angle_axis
 import torch
 import json
@@ -35,33 +7,21 @@ from poselib.core.rotation3d import *
 from poselib.skeleton.skeleton3d import SkeletonTree, SkeletonState, SkeletonMotion
 from poselib.visualization.common import plot_skeleton_state, plot_skeleton_motion_interactive
 
-"""
-This scripts shows how to retarget a motion clip from the source skeleton to a target skeleton.
-Data required for retargeting are stored in a retarget config dictionary as a json file. This file contains:
-  - source_motion: a SkeletonMotion npy format representation of a motion sequence. The motion clip should use the same skeleton as the source T-Pose skeleton.
-  - target_motion_path: path to save the retargeted motion to
-  - source_tpose: a SkeletonState npy format representation of the source skeleton in it's T-Pose state
-  - target_tpose: a SkeletonState npy format representation of the target skeleton in it's T-Pose state (pose should match source T-Pose)
-  - joint_mapping: mapping of joint names from source to target
-  - rotation: root rotation offset from source to target skeleton (for transforming across different orientation axes), represented as a quaternion in XYZW order.
-  - scale: scale offset from source to target skeleton
-"""
-
-VISUALIZE = True
+VISUALIZE = False
 
 def project_joints(motion):
-    right_upper_arm_id = motion.skeleton_tree._node_indices["right_upper_arm"]
-    right_lower_arm_id = motion.skeleton_tree._node_indices["right_lower_arm"]
+    right_upper_arm_id = motion.skeleton_tree._node_indices["right_shoulder"]
+    right_lower_arm_id = motion.skeleton_tree._node_indices["right_forearm"]
     right_hand_id = motion.skeleton_tree._node_indices["right_hand"]
-    left_upper_arm_id = motion.skeleton_tree._node_indices["left_upper_arm"]
-    left_lower_arm_id = motion.skeleton_tree._node_indices["left_lower_arm"]
+    left_upper_arm_id = motion.skeleton_tree._node_indices["left_shoulder"]
+    left_lower_arm_id = motion.skeleton_tree._node_indices["left_forearm"]
     left_hand_id = motion.skeleton_tree._node_indices["left_hand"]
     
-    right_thigh_id = motion.skeleton_tree._node_indices["right_thigh"]
-    right_shin_id = motion.skeleton_tree._node_indices["right_shin"]
+    right_thigh_id = motion.skeleton_tree._node_indices["right_upper_leg"]
+    right_shin_id = motion.skeleton_tree._node_indices["right_leg"]
     right_foot_id = motion.skeleton_tree._node_indices["right_foot"]
-    left_thigh_id = motion.skeleton_tree._node_indices["left_thigh"]
-    left_shin_id = motion.skeleton_tree._node_indices["left_shin"]
+    left_thigh_id = motion.skeleton_tree._node_indices["left_upper_leg"]
+    left_shin_id = motion.skeleton_tree._node_indices["left_leg"]
     left_foot_id = motion.skeleton_tree._node_indices["left_foot"]
     
     device = motion.global_translation.device
@@ -202,10 +162,9 @@ def project_joints(motion):
     
     return new_motion
 
-
 def main():
     # load retarget config
-    retarget_data_path = "data/dog_v2/configs/retarget_dog_to_amp.json"
+    retarget_data_path = "data/dog/configs/retarget_dog_to_amp.json"
     with open(retarget_data_path) as f:
         retarget_data = json.load(f)
 
@@ -235,7 +194,9 @@ def main():
       rotation_to_target_skeleton=rotation_to_target_skeleton,
       scale_to_target_skeleton=retarget_data["scale"]
     )
-
+    if VISUALIZE:
+        plot_skeleton_motion_interactive(target_motion)
+    
     # keep frames between [trim_frame_beg, trim_frame_end - 1]
     frame_beg = retarget_data["trim_frame_beg"]
     frame_end = retarget_data["trim_frame_end"]
