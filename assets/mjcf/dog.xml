@@ -126,7 +126,7 @@
         </body>
       </body>
 
-      <body name="left_upper_leg" pos="-0.074803 -0.059860 -0.095825">
+      <body name="left_upper_leg" pos="-0.074803 -0.109860 -0.095825">
         <joint name="left_upper_leg_x" pos="0 0 0" axis="1 0 0" range="-120 60" stiffness="700" damping="70" armature=".02"/>
         <joint name="left_upper_leg_y" pos="0 0 0" axis="0 1 0" range="-90 90" stiffness="700" damping="70" armature=".02"/>
         <joint name="left_upper_leg_z" pos="0 0 0" axis="0 0 1" range="-50 50" stiffness="700" damping="70" armature=".02"/>
@@ -156,7 +156,7 @@
         </body>
       </body>
 
-      <body name="right_upper_leg" pos="-0.074803 0.059860 -0.095825">
+      <body name="right_upper_leg" pos="-0.074803 0.109860 -0.095825">
         <joint name="right_upper_leg_x" pos="0 0 0" axis="1 0 0" range="-120 60" stiffness="700" damping="70" armature=".02"/>
         <joint name="right_upper_leg_y" pos="0 0 0" axis="0 1 0" range="-90 90" stiffness="700" damping="70" armature=".02"/>
         <joint name="right_upper_leg_z" pos="0 0 0" axis="0 0 1" range="-50 50" stiffness="700" damping="70" armature=".02"/>
