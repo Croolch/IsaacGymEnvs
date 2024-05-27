@@ -29,6 +29,7 @@ class WandbAlgoObserver(AlgoObserver):
         def init_wandb():
             wandb.init(
                 project=cfg.wandb_project,
+                config=omegaconf_to_dict(self.cfg),
                 entity=cfg.wandb_entity,
                 group=cfg.wandb_group,
                 tags=cfg.wandb_tags,
