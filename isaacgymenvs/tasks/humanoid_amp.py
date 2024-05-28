@@ -256,15 +256,15 @@ class HumanoidAMP(HumanoidAMPBase):
         return
 
     def _set_env_state(self, env_ids, root_pos, root_rot, dof_pos, root_vel, root_ang_vel, dof_vel):
-        self._root_states[env_ids, 0:3] = root_pos
-        self._root_states[env_ids, 3:7] = root_rot
-        self._root_states[env_ids, 7:10] = root_vel
-        self._root_states[env_ids, 10:13] = root_ang_vel
+        self._humanoid_root_states[env_ids, 0:3] = root_pos
+        self._humanoid_root_states[env_ids, 3:7] = root_rot
+        self._humanoid_root_states[env_ids, 7:10] = root_vel
+        self._humanoid_root_states[env_ids, 10:13] = root_ang_vel
         
         self._dof_pos[env_ids] = dof_pos
         self._dof_vel[env_ids] = dof_vel
 
-        env_ids_int32 = env_ids.to(dtype=torch.int32)
+        env_ids_int32 = self._humanoid_actor_ids[env_ids]
         self.gym.set_actor_root_state_tensor_indexed(self.sim, gymtorch.unwrap_tensor(self._root_states), 
                                                     gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
         self.gym.set_dof_state_tensor_indexed(self.sim, gymtorch.unwrap_tensor(self._dof_state),
@@ -283,10 +283,10 @@ class HumanoidAMP(HumanoidAMPBase):
     def _compute_amp_observations(self, env_ids=None):
         key_body_pos = self._rigid_body_pos[:, self._key_body_ids, :]
         if (env_ids is None):
-            self._curr_amp_obs_buf[:] = build_amp_observations(self._root_states, self._dof_pos, self._dof_vel, key_body_pos,
+            self._curr_amp_obs_buf[:] = build_amp_observations(self._humanoid_root_states, self._dof_pos, self._dof_vel, key_body_pos,
                                                                 self._local_root_obs)
         else:
-            self._curr_amp_obs_buf[env_ids] = build_amp_observations(self._root_states[env_ids], self._dof_pos[env_ids], 
+            self._curr_amp_obs_buf[env_ids] = build_amp_observations(self._humanoid_root_states[env_ids], self._dof_pos[env_ids], 
                                                                     self._dof_vel[env_ids], key_body_pos[env_ids],
                                                                     self._local_root_obs)
         return
