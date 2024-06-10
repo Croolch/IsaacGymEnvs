@@ -476,8 +476,8 @@ def dof_to_obs(pose):
     # type: (Tensor) -> Tensor
     #dof_obs_size = 64
     #dof_offsets = [0, 3, 6, 9, 12, 13, 16, 19, 20, 23, 24, 27, 30, 31, 34]
-    dof_obs_size = 52
-    dof_offsets = [0, 3, 6, 9, 10, 13, 14, 17, 18, 21, 24, 25, 28]
+    dof_obs_size = 112
+    dof_offsets = [0, 3, 6, 9, 12, 15, 16, 19, 22, 25, 26, 29, 32, 35, 36, 39, 42, 45, 46, 49, 52, 55, 58]
     num_joints = len(dof_offsets) - 1
 
     dof_obs_shape = pose.shape[:-1] + (dof_obs_size,)
