@@ -64,29 +64,38 @@ class DogAMPBase(VecTask):
         self.gym.refresh_net_contact_force_tensor(self.sim)
 
         self._root_states = gymtorch.wrap_tensor(actor_root_state)
-        self._initial_root_states = self._root_states.clone()
-        self._initial_root_states[:, 7:13] = 0
+        num_actors = self.get_num_actors_per_env()
+        
+        self._dog_root_states = self._root_states.view(self.num_envs, num_actors, actor_root_state.shape[-1])[..., 0, :]
+        self._initial_dog_root_states = self._dog_root_states.clone()
+        self._initial_dog_root_states[:, 7:13] = 0
+
+        self._dog_actor_ids = num_actors * torch.arange(self.num_envs, device=self.device, dtype=torch.int32)
 
         # create some wrapper tensors for different slices
         self._dof_state = gymtorch.wrap_tensor(dof_state_tensor)
-        self._dof_pos = self._dof_state.view(self.num_envs, self.num_dof, 2)[..., 0]
-        self._dof_vel = self._dof_state.view(self.num_envs, self.num_dof, 2)[..., 1]
+        dofs_per_env = self._dof_state.shape[0] // self.num_envs
+        self._dof_pos = self._dof_state.view(self.num_envs, dofs_per_env, 2)[..., :self.num_dof, 0]
+        self._dof_vel = self._dof_state.view(self.num_envs, dofs_per_env, 2)[..., :self.num_dof, 1]
 
         self._initial_dof_pos = torch.zeros_like(self._dof_pos, device=self.device, dtype=torch.float)
-        # 初始tpose
-        # right_shoulder_x_handle = self.gym.find_actor_dof_handle(self.envs[0], self.humanoid_handles[0], "right_shoulder_x")
-        # left_shoulder_x_handle = self.gym.find_actor_dof_handle(self.envs[0], self.humanoid_handles[0], "left_shoulder_x")
-        # self._initial_dof_pos[:, right_shoulder_x_handle] = 0.5 * np.pi
-        # self._initial_dof_pos[:, left_shoulder_x_handle] = -0.5 * np.pi
+        right_shoulder_x_handle = self.gym.find_actor_dof_handle(self.envs[0], self.dog_handles[0], "right_shoulder_x")
+        left_shoulder_x_handle = self.gym.find_actor_dof_handle(self.envs[0], self.dog_handles[0], "left_shoulder_x")
+        self._initial_dof_pos[:, right_shoulder_x_handle] = 0.5 * np.pi
+        self._initial_dof_pos[:, left_shoulder_x_handle] = -0.5 * np.pi
 
         self._initial_dof_vel = torch.zeros_like(self._dof_vel, device=self.device, dtype=torch.float)
         
         self._rigid_body_state = gymtorch.wrap_tensor(rigid_body_state)
-        self._rigid_body_pos = self._rigid_body_state.view(self.num_envs, self.num_bodies, 13)[..., 0:3]
-        self._rigid_body_rot = self._rigid_body_state.view(self.num_envs, self.num_bodies, 13)[..., 3:7]
-        self._rigid_body_vel = self._rigid_body_state.view(self.num_envs, self.num_bodies, 13)[..., 7:10]
-        self._rigid_body_ang_vel = self._rigid_body_state.view(self.num_envs, self.num_bodies, 13)[..., 10:13]
-        self._contact_forces = gymtorch.wrap_tensor(contact_force_tensor).view(self.num_envs, self.num_bodies, 3)
+        bodies_per_env = self._rigid_body_state.shape[0] // self.num_envs
+        rigid_body_state_reshaped = self._rigid_body_state.view(self.num_envs, bodies_per_env, 13)
+
+        self._rigid_body_pos = rigid_body_state_reshaped[..., :self.num_bodies, 0:3]
+        self._rigid_body_rot = rigid_body_state_reshaped[..., :self.num_bodies, 3:7]
+        self._rigid_body_vel = rigid_body_state_reshaped[..., :self.num_bodies, 7:10]
+        self._rigid_body_ang_vel = rigid_body_state_reshaped[..., :self.num_bodies, 10:13]
+
+        self._contact_forces = gymtorch.wrap_tensor(contact_force_tensor).view(self.num_envs, bodies_per_env, 3)
         
         self._terminate_buf = torch.ones(self.num_envs, device=self.device, dtype=torch.long)
         
@@ -94,6 +103,10 @@ class DogAMPBase(VecTask):
             self._init_camera()
             
         return
+
+    def get_num_actors_per_env(self):
+        num_actors = self._root_states.shape[0] // self.num_envs
+        return num_actors
 
     def get_obs_size(self):
         return NUM_OBS
@@ -115,6 +128,10 @@ class DogAMPBase(VecTask):
         return
 
     def reset_idx(self, env_ids):
+        self._reset_envs(env_ids)
+        return
+
+    def _reset_envs(self, env_ids):
         self._reset_actors(env_ids)
         self._refresh_sim_tensors()
         self._compute_observations(env_ids)
@@ -123,7 +140,7 @@ class DogAMPBase(VecTask):
     def set_char_color(self, col):
         for i in range(self.num_envs):
             env_ptr = self.envs[i]
-            handle = self.humanoid_handles[i]
+            handle = self.dog_handles[i]
 
             for j in range(self.num_bodies):
                 self.gym.set_rigid_body_color(env_ptr, handle, j, gymapi.MESH_VISUAL,
@@ -177,40 +194,23 @@ class DogAMPBase(VecTask):
         self.num_joints = self.gym.get_asset_joint_count(dog_asset)
 
         start_pose = gymapi.Transform()
-        start_pose.p = gymapi.Vec3(*get_axis_params(0.8, self.up_axis_idx))
+        start_pose.p = gymapi.Vec3(*get_axis_params(0.89, self.up_axis_idx))
         start_pose.r = gymapi.Quat(0.0, 0.0, 0.0, 1.0)
 
         self.start_rotation = torch.tensor([start_pose.r.x, start_pose.r.y, start_pose.r.z, start_pose.r.w], device=self.device)
 
-        self.humanoid_handles = []
+        self.dog_handles = []
         self.envs = []
         self.dof_limits_lower = []
         self.dof_limits_upper = []
         
         for i in range(self.num_envs):
             # create env instance
-            env_ptr = self.gym.create_env(
-                self.sim, lower, upper, num_per_row
-            )
-            contact_filter = 0
-            
-            handle = self.gym.create_actor(env_ptr, dog_asset, start_pose, "dog", i, contact_filter, 0)
-
-            self.gym.enable_actor_dof_force_sensors(env_ptr, handle)
-
-            for j in range(self.num_bodies):
-                self.gym.set_rigid_body_color(
-                    env_ptr, handle, j, gymapi.MESH_VISUAL, gymapi.Vec3(0.4706, 0.549, 0.6863))
-
+            env_ptr = self.gym.create_env(self.sim, lower, upper, num_per_row)
+            self._build_env(i, env_ptr, dog_asset)
             self.envs.append(env_ptr)
-            self.humanoid_handles.append(handle)
 
-            if (self._pd_control):
-                dof_prop = self.gym.get_asset_dof_properties(dog_asset)
-                dof_prop["driveMode"] = gymapi.DOF_MODE_POS
-                self.gym.set_actor_dof_properties(env_ptr, handle, dof_prop)
-
-        dof_prop = self.gym.get_actor_dof_properties(env_ptr, handle)
+        dof_prop = self.gym.get_actor_dof_properties(self.envs[0], self.dog_handles[0])
         for j in range(self.num_dof):
             if dof_prop['lower'][j] > dof_prop['upper'][j]:
                 self.dof_limits_lower.append(dof_prop['upper'][j])
@@ -222,11 +222,39 @@ class DogAMPBase(VecTask):
         self.dof_limits_lower = to_torch(self.dof_limits_lower, device=self.device)
         self.dof_limits_upper = to_torch(self.dof_limits_upper, device=self.device)
 
-        self._key_body_ids = self._build_key_body_ids_tensor(env_ptr, handle)
-        self._contact_body_ids = self._build_contact_body_ids_tensor(env_ptr, handle)
+        self._key_body_ids = self._build_key_body_ids_tensor(self.envs[0], self.dog_handles[0])
+        self._contact_body_ids = self._build_contact_body_ids_tensor(self.envs[0], self.dog_handles[0])
         
         if (self._pd_control):
             self._build_pd_action_offset_scale()
+
+        return
+    
+    def _build_env(self, env_id, env_ptr, dog_asset):
+        col_group = env_id
+        col_filter = 0
+        segmentation_id = 0
+
+        start_pose = gymapi.Transform()
+        asset_file = self.cfg["env"]["asset"]["assetFileName"]
+        char_h = 0.89
+
+        start_pose.p = gymapi.Vec3(*get_axis_params(char_h, self.up_axis_idx))
+        start_pose.r = gymapi.Quat(0.0, 0.0, 0.0, 1.0)
+        
+        dog_handle = self.gym.create_actor(env_ptr, dog_asset, start_pose, "dog", col_group, col_filter, segmentation_id)
+
+        self.gym.enable_actor_dof_force_sensors(env_ptr, dog_handle)
+
+        for j in range(self.num_bodies):
+            self.gym.set_rigid_body_color(env_ptr, dog_handle, j, gymapi.MESH_VISUAL, gymapi.Vec3(0.54, 0.85, 0.2))
+
+        if (self._pd_control):
+            dof_prop = self.gym.get_asset_dof_properties(dog_asset)
+            dof_prop["driveMode"] = gymapi.DOF_MODE_POS
+            self.gym.set_actor_dof_properties(env_ptr, dog_handle, dof_prop)
+
+        self.dog_handles.append(dog_handle)
 
         return
 
@@ -298,12 +326,12 @@ class DogAMPBase(VecTask):
 
     def _compute_humanoid_obs(self, env_ids=None):
         if (env_ids is None):
-            root_states = self._root_states
+            root_states = self._dog_root_states
             dof_pos = self._dof_pos
             dof_vel = self._dof_vel
             key_body_pos = self._rigid_body_pos[:, self._key_body_ids, :]
         else:
-            root_states = self._root_states[env_ids]
+            root_states = self._dog_root_states[env_ids]
             dof_pos = self._dof_pos[env_ids]
             dof_vel = self._dof_vel[env_ids]
             key_body_pos = self._rigid_body_pos[env_ids][:, self._key_body_ids, :]
@@ -360,11 +388,12 @@ class DogAMPBase(VecTask):
 
         return
 
-    def render(self, mode="rgb_array"):
+    def render(self):
         if self.viewer and self.camera_follow:
             self._update_camera()
 
-        return super().render(mode=mode)
+        super().render()
+        return
 
     def _build_key_body_ids_tensor(self, env_ptr, actor_handle):
         body_ids = []
@@ -392,7 +421,7 @@ class DogAMPBase(VecTask):
 
     def _init_camera(self):
         self.gym.refresh_actor_root_state_tensor(self.sim)
-        self._cam_prev_char_pos = self._root_states[0, 0:3].cpu().numpy()
+        self._cam_prev_char_pos = self._dog_root_states[0, 0:3].cpu().numpy()
         
         cam_pos = gymapi.Vec3(self._cam_prev_char_pos[0], 
                               self._cam_prev_char_pos[1] - 3.0, 
@@ -405,7 +434,7 @@ class DogAMPBase(VecTask):
 
     def _update_camera(self):
         self.gym.refresh_actor_root_state_tensor(self.sim)
-        char_root_pos = self._root_states[0, 0:3].cpu().numpy()
+        char_root_pos = self._dog_root_states[0, 0:3].cpu().numpy()
         
         cam_trans = self.gym.get_viewer_camera_transform(self.viewer, None)
         cam_pos = np.array([cam_trans.p.x, cam_trans.p.y, cam_trans.p.z])
@@ -423,6 +452,19 @@ class DogAMPBase(VecTask):
 
     def _update_debug_viz(self):
         self.gym.clear_lines(self.viewer)
+        # draw contact forces
+        lines = []
+        colors = []
+        for i in range(1):
+            for j in range(self.num_bodies):
+                contact_force = self._contact_forces[i, j]
+                if (contact_force.norm() > 0.1):
+                    body_pose = self._rigid_body_pos[i, j].cpu().numpy()
+                    points = [body_pose, body_pose + 0.1 * contact_force.cpu().numpy()]
+                    lines.append(points)
+                    colors.append([1.0, 0.0, 0.0])
+        
+        self.gym.add_lines(self.viewer, None, len(lines), lines, colors)
         return
 
 #####################################################################
@@ -434,10 +476,8 @@ def dof_to_obs(pose):
     # type: (Tensor) -> Tensor
     #dof_obs_size = 64
     #dof_offsets = [0, 3, 6, 9, 12, 13, 16, 19, 20, 23, 24, 27, 30, 31, 34]
-    # dof_obs_size = 52
-    # dof_offsets = [0, 3, 6, 9, 10, 13, 14, 17, 18, 21, 24, 25, 28]
-    dof_obs_size = 112
-    dof_offsets = [0, 3, 6, 9, 12, 15, 16, 19, 22, 25, 26, 29, 32, 35, 36, 39, 42, 45, 46, 49, 52, 55, 58]
+    dof_obs_size = 52
+    dof_offsets = [0, 3, 6, 9, 10, 13, 14, 17, 18, 21, 24, 25, 28]
     num_joints = len(dof_offsets) - 1
 
     dof_obs_shape = pose.shape[:-1] + (dof_obs_size,)
