@@ -8,11 +8,6 @@ from poselib.visualization.common import plot_skeleton_state, plot_skeleton_moti
 import os
 import json
 
-fbx_dir = "data/dog/fbx"
-npy_dir = "data/dog/npy"
-retargetd_npy_dir = "data/dog/retarget"
-config_dir = "data/dog/configs"
-
 
 def import_and_save_motion(fbx_file, output):
     # import fbx file - make sure to provide a valid joint name for root_joint
@@ -23,172 +18,19 @@ def import_and_save_motion(fbx_file, output):
     )
     motion.to_file(output)
 
-def project_joints(motion):
-    right_upper_arm_id = motion.skeleton_tree._node_indices["right_shoulder"]
-    right_lower_arm_id = motion.skeleton_tree._node_indices["right_forearm"]
-    right_hand_id = motion.skeleton_tree._node_indices["right_hand"]
-    left_upper_arm_id = motion.skeleton_tree._node_indices["left_shoulder"]
-    left_lower_arm_id = motion.skeleton_tree._node_indices["left_forearm"]
-    left_hand_id = motion.skeleton_tree._node_indices["left_hand"]
-    
-    right_thigh_id = motion.skeleton_tree._node_indices["right_upper_leg"]
-    right_shin_id = motion.skeleton_tree._node_indices["right_leg"]
-    right_foot_id = motion.skeleton_tree._node_indices["right_foot"]
-    left_thigh_id = motion.skeleton_tree._node_indices["left_upper_leg"]
-    left_shin_id = motion.skeleton_tree._node_indices["left_leg"]
-    left_foot_id = motion.skeleton_tree._node_indices["left_foot"]
-    
-    device = motion.global_translation.device
-
-    # right arm
-    right_upper_arm_pos = motion.global_translation[..., right_upper_arm_id, :]
-    right_lower_arm_pos = motion.global_translation[..., right_lower_arm_id, :]
-    right_hand_pos = motion.global_translation[..., right_hand_id, :]
-    right_shoulder_rot = motion.local_rotation[..., right_upper_arm_id, :]
-    right_elbow_rot = motion.local_rotation[..., right_lower_arm_id, :]
-    
-    right_arm_delta0 = right_upper_arm_pos - right_lower_arm_pos
-    right_arm_delta1 = right_hand_pos - right_lower_arm_pos
-    right_arm_delta0 = right_arm_delta0 / torch.norm(right_arm_delta0, dim=-1, keepdim=True)
-    right_arm_delta1 = right_arm_delta1 / torch.norm(right_arm_delta1, dim=-1, keepdim=True)
-    right_elbow_dot = torch.sum(-right_arm_delta0 * right_arm_delta1, dim=-1)
-    right_elbow_dot = torch.clamp(right_elbow_dot, -1.0, 1.0)
-    right_elbow_theta = torch.acos(right_elbow_dot)
-    right_elbow_q = quat_from_angle_axis(-torch.abs(right_elbow_theta), torch.tensor(np.array([[0.0, 1.0, 0.0]]), 
-                                            device=device, dtype=torch.float32))
-    
-    right_elbow_local_dir = motion.skeleton_tree.local_translation[right_hand_id]
-    right_elbow_local_dir = right_elbow_local_dir / torch.norm(right_elbow_local_dir)
-    right_elbow_local_dir_tile = torch.tile(right_elbow_local_dir.unsqueeze(0), [right_elbow_rot.shape[0], 1])
-    right_elbow_local_dir0 = quat_rotate(right_elbow_rot, right_elbow_local_dir_tile)
-    right_elbow_local_dir1 = quat_rotate(right_elbow_q, right_elbow_local_dir_tile)
-    right_arm_dot = torch.sum(right_elbow_local_dir0 * right_elbow_local_dir1, dim=-1)
-    right_arm_dot = torch.clamp(right_arm_dot, -1.0, 1.0)
-    right_arm_theta = torch.acos(right_arm_dot)
-    right_arm_theta = torch.where(right_elbow_local_dir0[..., 1] <= 0, right_arm_theta, -right_arm_theta)
-    right_arm_q = quat_from_angle_axis(right_arm_theta, right_elbow_local_dir.unsqueeze(0))
-    right_shoulder_rot = quat_mul(right_shoulder_rot, right_arm_q)
-    
-    # left arm
-    left_upper_arm_pos = motion.global_translation[..., left_upper_arm_id, :]
-    left_lower_arm_pos = motion.global_translation[..., left_lower_arm_id, :]
-    left_hand_pos = motion.global_translation[..., left_hand_id, :]
-    left_shoulder_rot = motion.local_rotation[..., left_upper_arm_id, :]
-    left_elbow_rot = motion.local_rotation[..., left_lower_arm_id, :]
-    
-    left_arm_delta0 = left_upper_arm_pos - left_lower_arm_pos
-    left_arm_delta1 = left_hand_pos - left_lower_arm_pos
-    left_arm_delta0 = left_arm_delta0 / torch.norm(left_arm_delta0, dim=-1, keepdim=True)
-    left_arm_delta1 = left_arm_delta1 / torch.norm(left_arm_delta1, dim=-1, keepdim=True)
-    left_elbow_dot = torch.sum(-left_arm_delta0 * left_arm_delta1, dim=-1)
-    left_elbow_dot = torch.clamp(left_elbow_dot, -1.0, 1.0)
-    left_elbow_theta = torch.acos(left_elbow_dot)
-    left_elbow_q = quat_from_angle_axis(-torch.abs(left_elbow_theta), torch.tensor(np.array([[0.0, 1.0, 0.0]]), 
-                                        device=device, dtype=torch.float32))
-
-    left_elbow_local_dir = motion.skeleton_tree.local_translation[left_hand_id]
-    left_elbow_local_dir = left_elbow_local_dir / torch.norm(left_elbow_local_dir)
-    left_elbow_local_dir_tile = torch.tile(left_elbow_local_dir.unsqueeze(0), [left_elbow_rot.shape[0], 1])
-    left_elbow_local_dir0 = quat_rotate(left_elbow_rot, left_elbow_local_dir_tile)
-    left_elbow_local_dir1 = quat_rotate(left_elbow_q, left_elbow_local_dir_tile)
-    left_arm_dot = torch.sum(left_elbow_local_dir0 * left_elbow_local_dir1, dim=-1)
-    left_arm_dot = torch.clamp(left_arm_dot, -1.0, 1.0)
-    left_arm_theta = torch.acos(left_arm_dot)
-    left_arm_theta = torch.where(left_elbow_local_dir0[..., 1] <= 0, left_arm_theta, -left_arm_theta)
-    left_arm_q = quat_from_angle_axis(left_arm_theta, left_elbow_local_dir.unsqueeze(0))
-    left_shoulder_rot = quat_mul(left_shoulder_rot, left_arm_q)
-    
-    # right leg
-    right_thigh_pos = motion.global_translation[..., right_thigh_id, :]
-    right_shin_pos = motion.global_translation[..., right_shin_id, :]
-    right_foot_pos = motion.global_translation[..., right_foot_id, :]
-    right_hip_rot = motion.local_rotation[..., right_thigh_id, :]
-    right_knee_rot = motion.local_rotation[..., right_shin_id, :]
-    
-    right_leg_delta0 = right_thigh_pos - right_shin_pos
-    right_leg_delta1 = right_foot_pos - right_shin_pos
-    right_leg_delta0 = right_leg_delta0 / torch.norm(right_leg_delta0, dim=-1, keepdim=True)
-    right_leg_delta1 = right_leg_delta1 / torch.norm(right_leg_delta1, dim=-1, keepdim=True)
-    right_knee_dot = torch.sum(-right_leg_delta0 * right_leg_delta1, dim=-1)
-    right_knee_dot = torch.clamp(right_knee_dot, -1.0, 1.0)
-    right_knee_theta = torch.acos(right_knee_dot)
-    right_knee_q = quat_from_angle_axis(torch.abs(right_knee_theta), torch.tensor(np.array([[0.0, 1.0, 0.0]]), 
-                                        device=device, dtype=torch.float32))
-    
-    right_knee_local_dir = motion.skeleton_tree.local_translation[right_foot_id]
-    right_knee_local_dir = right_knee_local_dir / torch.norm(right_knee_local_dir)
-    right_knee_local_dir_tile = torch.tile(right_knee_local_dir.unsqueeze(0), [right_knee_rot.shape[0], 1])
-    right_knee_local_dir0 = quat_rotate(right_knee_rot, right_knee_local_dir_tile)
-    right_knee_local_dir1 = quat_rotate(right_knee_q, right_knee_local_dir_tile)
-    right_leg_dot = torch.sum(right_knee_local_dir0 * right_knee_local_dir1, dim=-1)
-    right_leg_dot = torch.clamp(right_leg_dot, -1.0, 1.0)
-    right_leg_theta = torch.acos(right_leg_dot)
-    right_leg_theta = torch.where(right_knee_local_dir0[..., 1] >= 0, right_leg_theta, -right_leg_theta)
-    right_leg_q = quat_from_angle_axis(right_leg_theta, right_knee_local_dir.unsqueeze(0))
-    right_hip_rot = quat_mul(right_hip_rot, right_leg_q)
-    
-    # left leg
-    left_thigh_pos = motion.global_translation[..., left_thigh_id, :]
-    left_shin_pos = motion.global_translation[..., left_shin_id, :]
-    left_foot_pos = motion.global_translation[..., left_foot_id, :]
-    left_hip_rot = motion.local_rotation[..., left_thigh_id, :]
-    left_knee_rot = motion.local_rotation[..., left_shin_id, :]
-    
-    left_leg_delta0 = left_thigh_pos - left_shin_pos
-    left_leg_delta1 = left_foot_pos - left_shin_pos
-    left_leg_delta0 = left_leg_delta0 / torch.norm(left_leg_delta0, dim=-1, keepdim=True)
-    left_leg_delta1 = left_leg_delta1 / torch.norm(left_leg_delta1, dim=-1, keepdim=True)
-    left_knee_dot = torch.sum(-left_leg_delta0 * left_leg_delta1, dim=-1)
-    left_knee_dot = torch.clamp(left_knee_dot, -1.0, 1.0)
-    left_knee_theta = torch.acos(left_knee_dot)
-    left_knee_q = quat_from_angle_axis(torch.abs(left_knee_theta), torch.tensor(np.array([[0.0, 1.0, 0.0]]), 
-                                        device=device, dtype=torch.float32))
-    
-    left_knee_local_dir = motion.skeleton_tree.local_translation[left_foot_id]
-    left_knee_local_dir = left_knee_local_dir / torch.norm(left_knee_local_dir)
-    left_knee_local_dir_tile = torch.tile(left_knee_local_dir.unsqueeze(0), [left_knee_rot.shape[0], 1])
-    left_knee_local_dir0 = quat_rotate(left_knee_rot, left_knee_local_dir_tile)
-    left_knee_local_dir1 = quat_rotate(left_knee_q, left_knee_local_dir_tile)
-    left_leg_dot = torch.sum(left_knee_local_dir0 * left_knee_local_dir1, dim=-1)
-    left_leg_dot = torch.clamp(left_leg_dot, -1.0, 1.0)
-    left_leg_theta = torch.acos(left_leg_dot)
-    left_leg_theta = torch.where(left_knee_local_dir0[..., 1] >= 0, left_leg_theta, -left_leg_theta)
-    left_leg_q = quat_from_angle_axis(left_leg_theta, left_knee_local_dir.unsqueeze(0))
-    left_hip_rot = quat_mul(left_hip_rot, left_leg_q)
-    
-
-    new_local_rotation = motion.local_rotation.clone()
-    new_local_rotation[..., right_upper_arm_id, :] = right_shoulder_rot
-    new_local_rotation[..., right_lower_arm_id, :] = right_elbow_q
-    new_local_rotation[..., left_upper_arm_id, :] = left_shoulder_rot
-    new_local_rotation[..., left_lower_arm_id, :] = left_elbow_q
-    
-    new_local_rotation[..., right_thigh_id, :] = right_hip_rot
-    new_local_rotation[..., right_shin_id, :] = right_knee_q
-    new_local_rotation[..., left_thigh_id, :] = left_hip_rot
-    new_local_rotation[..., left_shin_id, :] = left_knee_q
-    
-    new_local_rotation[..., left_hand_id, :] = quat_identity([1])
-    new_local_rotation[..., right_hand_id, :] = quat_identity([1])
-
-    new_sk_state = SkeletonState.from_rotation_and_root_translation(motion.skeleton_tree, new_local_rotation, motion.root_translation, is_local=True)
-    new_motion = SkeletonMotion.from_skeleton_state(new_sk_state, fps=motion.fps)
-    
-    return new_motion
-
 # def project_joints(motion):
-#     right_upper_arm_id = motion.skeleton_tree._node_indices["right_upper_arm"]
-#     right_lower_arm_id = motion.skeleton_tree._node_indices["right_lower_arm"]
+#     right_upper_arm_id = motion.skeleton_tree._node_indices["right_shoulder"]
+#     right_lower_arm_id = motion.skeleton_tree._node_indices["right_forearm"]
 #     right_hand_id = motion.skeleton_tree._node_indices["right_hand"]
-#     left_upper_arm_id = motion.skeleton_tree._node_indices["left_upper_arm"]
-#     left_lower_arm_id = motion.skeleton_tree._node_indices["left_lower_arm"]
+#     left_upper_arm_id = motion.skeleton_tree._node_indices["left_shoulder"]
+#     left_lower_arm_id = motion.skeleton_tree._node_indices["left_forearm"]
 #     left_hand_id = motion.skeleton_tree._node_indices["left_hand"]
     
-#     right_thigh_id = motion.skeleton_tree._node_indices["right_thigh"]
-#     right_shin_id = motion.skeleton_tree._node_indices["right_shin"]
+#     right_thigh_id = motion.skeleton_tree._node_indices["right_upper_leg"]
+#     right_shin_id = motion.skeleton_tree._node_indices["right_leg"]
 #     right_foot_id = motion.skeleton_tree._node_indices["right_foot"]
-#     left_thigh_id = motion.skeleton_tree._node_indices["left_thigh"]
-#     left_shin_id = motion.skeleton_tree._node_indices["left_shin"]
+#     left_thigh_id = motion.skeleton_tree._node_indices["left_upper_leg"]
+#     left_shin_id = motion.skeleton_tree._node_indices["left_leg"]
 #     left_foot_id = motion.skeleton_tree._node_indices["left_foot"]
     
 #     device = motion.global_translation.device
@@ -329,6 +171,159 @@ def project_joints(motion):
     
 #     return new_motion
 
+def project_joints(motion):
+    right_upper_arm_id = motion.skeleton_tree._node_indices["right_upper_arm"]
+    right_lower_arm_id = motion.skeleton_tree._node_indices["right_lower_arm"]
+    right_hand_id = motion.skeleton_tree._node_indices["right_hand"]
+    left_upper_arm_id = motion.skeleton_tree._node_indices["left_upper_arm"]
+    left_lower_arm_id = motion.skeleton_tree._node_indices["left_lower_arm"]
+    left_hand_id = motion.skeleton_tree._node_indices["left_hand"]
+    
+    right_thigh_id = motion.skeleton_tree._node_indices["right_thigh"]
+    right_shin_id = motion.skeleton_tree._node_indices["right_shin"]
+    right_foot_id = motion.skeleton_tree._node_indices["right_foot"]
+    left_thigh_id = motion.skeleton_tree._node_indices["left_thigh"]
+    left_shin_id = motion.skeleton_tree._node_indices["left_shin"]
+    left_foot_id = motion.skeleton_tree._node_indices["left_foot"]
+    
+    device = motion.global_translation.device
+
+    # right arm
+    right_upper_arm_pos = motion.global_translation[..., right_upper_arm_id, :]
+    right_lower_arm_pos = motion.global_translation[..., right_lower_arm_id, :]
+    right_hand_pos = motion.global_translation[..., right_hand_id, :]
+    right_shoulder_rot = motion.local_rotation[..., right_upper_arm_id, :]
+    right_elbow_rot = motion.local_rotation[..., right_lower_arm_id, :]
+    
+    right_arm_delta0 = right_upper_arm_pos - right_lower_arm_pos
+    right_arm_delta1 = right_hand_pos - right_lower_arm_pos
+    right_arm_delta0 = right_arm_delta0 / torch.norm(right_arm_delta0, dim=-1, keepdim=True)
+    right_arm_delta1 = right_arm_delta1 / torch.norm(right_arm_delta1, dim=-1, keepdim=True)
+    right_elbow_dot = torch.sum(-right_arm_delta0 * right_arm_delta1, dim=-1)
+    right_elbow_dot = torch.clamp(right_elbow_dot, -1.0, 1.0)
+    right_elbow_theta = torch.acos(right_elbow_dot)
+    right_elbow_q = quat_from_angle_axis(-torch.abs(right_elbow_theta), torch.tensor(np.array([[0.0, 1.0, 0.0]]), 
+                                            device=device, dtype=torch.float32))
+    
+    right_elbow_local_dir = motion.skeleton_tree.local_translation[right_hand_id]
+    right_elbow_local_dir = right_elbow_local_dir / torch.norm(right_elbow_local_dir)
+    right_elbow_local_dir_tile = torch.tile(right_elbow_local_dir.unsqueeze(0), [right_elbow_rot.shape[0], 1])
+    right_elbow_local_dir0 = quat_rotate(right_elbow_rot, right_elbow_local_dir_tile)
+    right_elbow_local_dir1 = quat_rotate(right_elbow_q, right_elbow_local_dir_tile)
+    right_arm_dot = torch.sum(right_elbow_local_dir0 * right_elbow_local_dir1, dim=-1)
+    right_arm_dot = torch.clamp(right_arm_dot, -1.0, 1.0)
+    right_arm_theta = torch.acos(right_arm_dot)
+    right_arm_theta = torch.where(right_elbow_local_dir0[..., 1] <= 0, right_arm_theta, -right_arm_theta)
+    right_arm_q = quat_from_angle_axis(right_arm_theta, right_elbow_local_dir.unsqueeze(0))
+    right_shoulder_rot = quat_mul(right_shoulder_rot, right_arm_q)
+    
+    # left arm
+    left_upper_arm_pos = motion.global_translation[..., left_upper_arm_id, :]
+    left_lower_arm_pos = motion.global_translation[..., left_lower_arm_id, :]
+    left_hand_pos = motion.global_translation[..., left_hand_id, :]
+    left_shoulder_rot = motion.local_rotation[..., left_upper_arm_id, :]
+    left_elbow_rot = motion.local_rotation[..., left_lower_arm_id, :]
+    
+    left_arm_delta0 = left_upper_arm_pos - left_lower_arm_pos
+    left_arm_delta1 = left_hand_pos - left_lower_arm_pos
+    left_arm_delta0 = left_arm_delta0 / torch.norm(left_arm_delta0, dim=-1, keepdim=True)
+    left_arm_delta1 = left_arm_delta1 / torch.norm(left_arm_delta1, dim=-1, keepdim=True)
+    left_elbow_dot = torch.sum(-left_arm_delta0 * left_arm_delta1, dim=-1)
+    left_elbow_dot = torch.clamp(left_elbow_dot, -1.0, 1.0)
+    left_elbow_theta = torch.acos(left_elbow_dot)
+    left_elbow_q = quat_from_angle_axis(-torch.abs(left_elbow_theta), torch.tensor(np.array([[0.0, 1.0, 0.0]]), 
+                                        device=device, dtype=torch.float32))
+
+    left_elbow_local_dir = motion.skeleton_tree.local_translation[left_hand_id]
+    left_elbow_local_dir = left_elbow_local_dir / torch.norm(left_elbow_local_dir)
+    left_elbow_local_dir_tile = torch.tile(left_elbow_local_dir.unsqueeze(0), [left_elbow_rot.shape[0], 1])
+    left_elbow_local_dir0 = quat_rotate(left_elbow_rot, left_elbow_local_dir_tile)
+    left_elbow_local_dir1 = quat_rotate(left_elbow_q, left_elbow_local_dir_tile)
+    left_arm_dot = torch.sum(left_elbow_local_dir0 * left_elbow_local_dir1, dim=-1)
+    left_arm_dot = torch.clamp(left_arm_dot, -1.0, 1.0)
+    left_arm_theta = torch.acos(left_arm_dot)
+    left_arm_theta = torch.where(left_elbow_local_dir0[..., 1] <= 0, left_arm_theta, -left_arm_theta)
+    left_arm_q = quat_from_angle_axis(left_arm_theta, left_elbow_local_dir.unsqueeze(0))
+    left_shoulder_rot = quat_mul(left_shoulder_rot, left_arm_q)
+    
+    # right leg
+    right_thigh_pos = motion.global_translation[..., right_thigh_id, :]
+    right_shin_pos = motion.global_translation[..., right_shin_id, :]
+    right_foot_pos = motion.global_translation[..., right_foot_id, :]
+    right_hip_rot = motion.local_rotation[..., right_thigh_id, :]
+    right_knee_rot = motion.local_rotation[..., right_shin_id, :]
+    
+    right_leg_delta0 = right_thigh_pos - right_shin_pos
+    right_leg_delta1 = right_foot_pos - right_shin_pos
+    right_leg_delta0 = right_leg_delta0 / torch.norm(right_leg_delta0, dim=-1, keepdim=True)
+    right_leg_delta1 = right_leg_delta1 / torch.norm(right_leg_delta1, dim=-1, keepdim=True)
+    right_knee_dot = torch.sum(-right_leg_delta0 * right_leg_delta1, dim=-1)
+    right_knee_dot = torch.clamp(right_knee_dot, -1.0, 1.0)
+    right_knee_theta = torch.acos(right_knee_dot)
+    right_knee_q = quat_from_angle_axis(torch.abs(right_knee_theta), torch.tensor(np.array([[0.0, 1.0, 0.0]]), 
+                                        device=device, dtype=torch.float32))
+    
+    right_knee_local_dir = motion.skeleton_tree.local_translation[right_foot_id]
+    right_knee_local_dir = right_knee_local_dir / torch.norm(right_knee_local_dir)
+    right_knee_local_dir_tile = torch.tile(right_knee_local_dir.unsqueeze(0), [right_knee_rot.shape[0], 1])
+    right_knee_local_dir0 = quat_rotate(right_knee_rot, right_knee_local_dir_tile)
+    right_knee_local_dir1 = quat_rotate(right_knee_q, right_knee_local_dir_tile)
+    right_leg_dot = torch.sum(right_knee_local_dir0 * right_knee_local_dir1, dim=-1)
+    right_leg_dot = torch.clamp(right_leg_dot, -1.0, 1.0)
+    right_leg_theta = torch.acos(right_leg_dot)
+    right_leg_theta = torch.where(right_knee_local_dir0[..., 1] >= 0, right_leg_theta, -right_leg_theta)
+    right_leg_q = quat_from_angle_axis(right_leg_theta, right_knee_local_dir.unsqueeze(0))
+    right_hip_rot = quat_mul(right_hip_rot, right_leg_q)
+    
+    # left leg
+    left_thigh_pos = motion.global_translation[..., left_thigh_id, :]
+    left_shin_pos = motion.global_translation[..., left_shin_id, :]
+    left_foot_pos = motion.global_translation[..., left_foot_id, :]
+    left_hip_rot = motion.local_rotation[..., left_thigh_id, :]
+    left_knee_rot = motion.local_rotation[..., left_shin_id, :]
+    
+    left_leg_delta0 = left_thigh_pos - left_shin_pos
+    left_leg_delta1 = left_foot_pos - left_shin_pos
+    left_leg_delta0 = left_leg_delta0 / torch.norm(left_leg_delta0, dim=-1, keepdim=True)
+    left_leg_delta1 = left_leg_delta1 / torch.norm(left_leg_delta1, dim=-1, keepdim=True)
+    left_knee_dot = torch.sum(-left_leg_delta0 * left_leg_delta1, dim=-1)
+    left_knee_dot = torch.clamp(left_knee_dot, -1.0, 1.0)
+    left_knee_theta = torch.acos(left_knee_dot)
+    left_knee_q = quat_from_angle_axis(torch.abs(left_knee_theta), torch.tensor(np.array([[0.0, 1.0, 0.0]]), 
+                                        device=device, dtype=torch.float32))
+    
+    left_knee_local_dir = motion.skeleton_tree.local_translation[left_foot_id]
+    left_knee_local_dir = left_knee_local_dir / torch.norm(left_knee_local_dir)
+    left_knee_local_dir_tile = torch.tile(left_knee_local_dir.unsqueeze(0), [left_knee_rot.shape[0], 1])
+    left_knee_local_dir0 = quat_rotate(left_knee_rot, left_knee_local_dir_tile)
+    left_knee_local_dir1 = quat_rotate(left_knee_q, left_knee_local_dir_tile)
+    left_leg_dot = torch.sum(left_knee_local_dir0 * left_knee_local_dir1, dim=-1)
+    left_leg_dot = torch.clamp(left_leg_dot, -1.0, 1.0)
+    left_leg_theta = torch.acos(left_leg_dot)
+    left_leg_theta = torch.where(left_knee_local_dir0[..., 1] >= 0, left_leg_theta, -left_leg_theta)
+    left_leg_q = quat_from_angle_axis(left_leg_theta, left_knee_local_dir.unsqueeze(0))
+    left_hip_rot = quat_mul(left_hip_rot, left_leg_q)
+    
+
+    new_local_rotation = motion.local_rotation.clone()
+    new_local_rotation[..., right_upper_arm_id, :] = right_shoulder_rot
+    new_local_rotation[..., right_lower_arm_id, :] = right_elbow_q
+    new_local_rotation[..., left_upper_arm_id, :] = left_shoulder_rot
+    new_local_rotation[..., left_lower_arm_id, :] = left_elbow_q
+    
+    new_local_rotation[..., right_thigh_id, :] = right_hip_rot
+    new_local_rotation[..., right_shin_id, :] = right_knee_q
+    new_local_rotation[..., left_thigh_id, :] = left_hip_rot
+    new_local_rotation[..., left_shin_id, :] = left_knee_q
+    
+    new_local_rotation[..., left_hand_id, :] = quat_identity([1])
+    new_local_rotation[..., right_hand_id, :] = quat_identity([1])
+
+    new_sk_state = SkeletonState.from_rotation_and_root_translation(motion.skeleton_tree, new_local_rotation, motion.root_translation, is_local=True)
+    new_motion = SkeletonMotion.from_skeleton_state(new_sk_state, fps=motion.fps)
+    
+    return new_motion
+
 
 def retarget_motion(retarget_data_path=None, VISUALIZE=False):
     # load retarget config
@@ -408,12 +403,15 @@ def retarget_motion(retarget_data_path=None, VISUALIZE=False):
     
     return
 
-def generate_config(fbx_file):
+def generate_config(fbx_file, default_config=None):
     # fbx_file is fbx file base name
     # return generated config file path
 
     # config template
-    with open(config_dir + "/retarget_dog_to_amp.json", "r") as f:
+    if default_config is None:
+        default_config = config_dir + "/retarget_cmu_to_amp.json"
+    
+    with open(default_config, "r") as f:
         config = json.load(f)
     
     config["source_motion"] = npy_dir + "/" + fbx_file + ".npy"
@@ -427,6 +425,13 @@ def generate_config(fbx_file):
     
     return config_output_path
 
+
+fbx_dir = "data/cmu/fbx"
+npy_dir = "data/cmu/npy"
+retargetd_npy_dir = "data/cmu/retarget"
+config_dir = "data/cmu/configs"
+default_config = "data/cmu/configs/retarget_cmu_to_amp.json"
+
 def main():
     fbx_files = os.listdir(fbx_dir)
     for fbx_file in fbx_files:
@@ -434,7 +439,7 @@ def main():
         npy_relative_path = npy_dir + "/" + fbx_file.replace(".fbx", ".npy")
         import_and_save_motion(fbx_relative_path, npy_relative_path)
 
-        config_file = generate_config(fbx_file.replace(".fbx", ""))
+        config_file = generate_config(fbx_file.replace(".fbx", ""), default_config)
         retarget_motion(config_file, False)
 
 main()
