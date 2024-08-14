@@ -93,12 +93,12 @@ class DogAMPHeading(DogAMPTask):
         self._marker_states = self._root_states.view(self.num_envs, num_actors, self._root_states.shape[-1])[..., TAR_ACTOR_ID, :]
         self._marker_pos = self._marker_states[..., :3]
         self._marker_rot = self._marker_states[..., 3:7]
-        self._marker_actor_ids = self._humanoid_actor_ids + TAR_ACTOR_ID
+        self._marker_actor_ids = self._dog_actor_ids + TAR_ACTOR_ID
 
         self._face_marker_states = self._root_states.view(self.num_envs, num_actors, self._root_states.shape[-1])[..., TAR_FACING_ACTOR_ID, :]
         self._face_marker_pos = self._face_marker_states[..., :3]
         self._face_marker_rot = self._face_marker_states[..., 3:7]
-        self._face_marker_actor_ids = self._humanoid_actor_ids + TAR_FACING_ACTOR_ID
+        self._face_marker_actor_ids = self._dog_actor_ids + TAR_FACING_ACTOR_ID
 
         return
 

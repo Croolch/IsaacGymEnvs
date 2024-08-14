@@ -19,9 +19,10 @@ env:
   numAMPObsSteps: 2
 
   localRootObs: False
-  contactBodies: ["left_finger", "right_finger", "left_toe", "right_toe"]
-  terminationHeight: 0.05
+  contactBodies: ["left_foot", "right_foot", "left_hand", "right_hand"]
+  terminationHeight: 0.08
   enableEarlyTermination: True
+  enableStillnessTermination: False
 
   tarSpeedMin: 1
   tarSpeedMax: 5
@@ -32,7 +33,7 @@ env:
   # animation files to learn from
   # these motions should use hyperparameters from HumanoidAMPPPO.yaml
   #motion_file: "amp_humanoid_walk.npy"
-  motion_file: "amp_humanoid_run.npy"
+  motion_file: "amp_dog_walk.npy"
   #motion_file: "amp_humanoid_dance.npy"
 
   # these motions should use hyperparameters from HumanoidAMPPPOLowGP.yaml

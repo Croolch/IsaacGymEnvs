@@ -1,5 +1,5 @@
 # used to create the object
-name: HumanoidAMPDog
+name: DogAMP
 
 physics_engine: ${..physics_engine}
 
@@ -11,7 +11,7 @@ env:
   cameraFollow: True # if the camera follows humanoid or not
   enableDebugVis: False
   
-  pdControl: True
+  pdControl: True  # using torque control
   powerScale: 1.0
   controlFrequencyInv: 2 # 30 Hz
   stateInit: "Random"
@@ -19,14 +19,15 @@ env:
   numAMPObsSteps: 2 # history and current observation
 
   localRootObs: False
-  contactBodies: ["left_finger", "right_finger", "left_toe", "right_toe"]
-  terminationHeight: 0.05
+  contactBodies: ["left_foot", "right_foot", "left_hand", "right_hand"]
+  terminationHeight: 0.12
   enableEarlyTermination: True
+  enableStillnessTermination: False
 
   # animation files to learn from
   # these motions should use hyperparameters from HumanoidAMPPPO.yaml
-  # motion_file: "amp_dog_walk.npy"
-  motion_file: "amp_dog_run.npy"
+  motion_file: "amp_dog_walk.npy"
+  # motion_file: "amp_dog_run.npy"
   #motion_file: "amp_humanoid_dance.npy"
 
   # these motions should use hyperparameters from HumanoidAMPPPOLowGP.yaml

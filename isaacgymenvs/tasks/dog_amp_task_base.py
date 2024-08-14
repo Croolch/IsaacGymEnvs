@@ -1,7 +1,7 @@
 import torch
-from .humanoid_amp_dog import HumanoidAMPDog
+from .dog_amp import DogAMP
 
-class DogAMPTask(HumanoidAMPDog):
+class DogAMPTask(DogAMP):
     def __init__(self, cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture, force_render):
         self._enable_task_obs = cfg["env"]["enableTaskObs"]
 
