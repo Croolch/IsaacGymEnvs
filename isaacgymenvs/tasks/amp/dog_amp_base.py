@@ -9,12 +9,18 @@ from isaacgymenvs.utils.torch_jit_utils import quat_mul, to_torch, get_axis_para
 
 from ..base.vec_task import VecTask
 
-DOF_BODY_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
-DOF_OFFSETS = [0, 3, 6, 9, 12, 15, 16, 19, 22, 25, 26, 29, 32, 35, 36, 39, 42, 45, 46, 49, 52, 55, 58]
-NUM_OBS = 13 + 112 + 58 + 12 # [root_h, root_rot, root_vel, root_ang_vel, dof_pos, dof_vel, key_body_pos]
-NUM_ACTIONS = 58
+# DOF_BODY_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
+# DOF_OFFSETS = [0, 3, 6, 9, 12, 15, 16, 19, 22, 25, 26, 29, 32, 35, 36, 39, 42, 45, 46, 49, 52, 55, 58]
+# NUM_OBS = 13 + 112 + 58 + 12 # [root_h, root_rot, root_vel, root_ang_vel, dof_pos, dof_vel, key_body_pos]
+# NUM_ACTIONS = 58
 
-KEY_BODY_NAMES = ["right_finger", "left_finger", "right_toe", "left_toe"]
+DOF_BODY_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+DOF_OFFSETS = [0, 3, 6, 9, 12, 15, 16, 19, 22, 23, 26, 29, 30, 33, 36, 37, 40, 43, 46]
+NUM_OBS = 13 + 88 + 46 + 12 # [root_h, root_rot, root_vel, root_ang_vel, dof_pos, dof_vel, key_body_pos]
+NUM_ACTIONS = 46
+
+KEY_BODY_NAMES = ["right_hand", "left_hand", "right_foot", "left_foot"]
+# KEY_BODY_NAMES = ["right_upper_leg", "left_upper_leg", "left_shoulder", "right_shoulder", "tail1"]
 
 class DogAMPBase(VecTask):
 
@@ -36,6 +42,8 @@ class DogAMPBase(VecTask):
         self._contact_bodies = self.cfg["env"]["contactBodies"]
         self._termination_height = self.cfg["env"]["terminationHeight"]
         self._enable_early_termination = self.cfg["env"]["enableEarlyTermination"]
+        self._enable_stillness_termination = self.cfg["env"]["enableStillnessTermination"]
+        # self._enable_stillness_termination = False
 
         self.cfg["env"]["numObservations"] = self.get_obs_size()
         self.cfg["env"]["numActions"] = self.get_action_size()
@@ -53,7 +61,7 @@ class DogAMPBase(VecTask):
         contact_force_tensor = self.gym.acquire_net_contact_force_tensor(self.sim)
 
         sensors_per_env = 2
-        self.vec_sensor_tensor = gymtorch.wrap_tensor(sensor_tensor).view(self.num_envs, sensors_per_env * 6)
+        # self.vec_sensor_tensor = gymtorch.wrap_tensor(sensor_tensor).view(self.num_envs, sensors_per_env * 6)
 
         dof_force_tensor = self.gym.acquire_dof_force_tensor(self.sim)
         self.dof_force_tensor = gymtorch.wrap_tensor(dof_force_tensor).view(self.num_envs, self.num_dof)
@@ -251,6 +259,8 @@ class DogAMPBase(VecTask):
 
         if (self._pd_control):
             dof_prop = self.gym.get_asset_dof_properties(dog_asset)
+            # dof_prop["stiffness"] *= 5
+            # dof_prop["damping"] *= 5
             dof_prop["driveMode"] = gymapi.DOF_MODE_POS
             self.gym.set_actor_dof_properties(env_ptr, dog_handle, dof_prop)
 
@@ -302,6 +312,9 @@ class DogAMPBase(VecTask):
                                                    self._contact_forces, self._contact_body_ids,
                                                    self._rigid_body_pos, self.max_episode_length,
                                                    self._enable_early_termination, self._termination_height)
+        if self._enable_stillness_termination:
+            self.reset_buf[:], self._terminate_buf[:] = compute_stillness_reset(self.reset_buf, self.progress_buf,
+                                                   self._terminate_buf, self._rigid_body_ang_vel)
         return
 
     def _refresh_sim_tensors(self):
@@ -472,12 +485,27 @@ class DogAMPBase(VecTask):
 #####################################################################
 
 @torch.jit.script
+def compute_stillness_reset(reset_buf, progress_buf, terminate_buf, rigid_body_ang_vel):
+    # type: (Tensor, Tensor, Tensor, Tensor) -> Tuple[Tensor, Tensor]
+    # rigid_body_ang_vel.shape = (num_envs, num_bodies, 3)
+    rigid_body_ang_vel_norm = rigid_body_ang_vel.norm(p=2, dim=-1)
+    has_still_per_body = rigid_body_ang_vel_norm < 0.5
+    has_still = has_still_per_body.all(dim=-1)
+    reset_buf = torch.logical_or(has_still, reset_buf)
+    terminate_buf = torch.logical_or(has_still, terminate_buf)
+
+    return reset_buf, terminate_buf
+
+
+@torch.jit.script
 def dof_to_obs(pose):
     # type: (Tensor) -> Tensor
     #dof_obs_size = 64
     #dof_offsets = [0, 3, 6, 9, 12, 13, 16, 19, 20, 23, 24, 27, 30, 31, 34]
-    dof_obs_size = 112
-    dof_offsets = [0, 3, 6, 9, 12, 15, 16, 19, 22, 25, 26, 29, 32, 35, 36, 39, 42, 45, 46, 49, 52, 55, 58]
+    # dof_obs_size = 112
+    # dof_offsets = [0, 3, 6, 9, 12, 15, 16, 19, 22, 25, 26, 29, 32, 35, 36, 39, 42, 45, 46, 49, 52, 55, 58]
+    dof_obs_size = 88
+    dof_offsets = [0, 3, 6, 9, 12, 15, 16, 19, 22, 23, 26, 29, 30, 33, 36, 37, 40, 43, 46]
     num_joints = len(dof_offsets) - 1
 
     dof_obs_shape = pose.shape[:-1] + (dof_obs_size,)
