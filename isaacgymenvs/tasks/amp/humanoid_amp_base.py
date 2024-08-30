@@ -38,13 +38,13 @@ from isaacgymenvs.utils.torch_jit_utils import quat_mul, to_torch, get_axis_para
 
 from ..base.vec_task import VecTask
 
-DOF_BODY_IDS = [1, 2, 3, 4, 6, 7, 9, 10, 11, 12, 13, 14]
-DOF_OFFSETS = [0, 3, 6, 9, 10, 13, 14, 17, 18, 21, 24, 25, 28]
-NUM_OBS = 13 + 52 + 28 + 12 # [root_h, root_rot, root_vel, root_ang_vel, dof_pos, dof_vel, key_body_pos]
-NUM_ACTIONS = 28
+DOF_BODY_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37]
+DOF_OFFSETS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37]
+NUM_OBS = 13 + 37 + 37 + 6 # [root_h, root_rot, root_vel, root_ang_vel, dof_pos, dof_vel, key_body_pos]
+NUM_ACTIONS = 37
 
 
-KEY_BODY_NAMES = ["right_hand", "left_hand", "right_foot", "left_foot"]
+KEY_BODY_NAMES = ["right_ankle_pitch_link", "left_ankle_pitch_link"]
 
 class HumanoidAMPBase(VecTask):
 
@@ -109,10 +109,10 @@ class HumanoidAMPBase(VecTask):
         self._dof_vel = self._dof_state.view(self.num_envs, dofs_per_env, 2)[..., :self.num_dof, 1]
 
         self._initial_dof_pos = torch.zeros_like(self._dof_pos, device=self.device, dtype=torch.float)
-        right_shoulder_x_handle = self.gym.find_actor_dof_handle(self.envs[0], self.humanoid_handles[0], "right_shoulder_x")
-        left_shoulder_x_handle = self.gym.find_actor_dof_handle(self.envs[0], self.humanoid_handles[0], "left_shoulder_x")
-        self._initial_dof_pos[:, right_shoulder_x_handle] = 0.5 * np.pi
-        self._initial_dof_pos[:, left_shoulder_x_handle] = -0.5 * np.pi
+        # right_shoulder_x_handle = self.gym.find_actor_dof_handle(self.envs[0], self.humanoid_handles[0], "right_shoulder_x")
+        # left_shoulder_x_handle = self.gym.find_actor_dof_handle(self.envs[0], self.humanoid_handles[0], "left_shoulder_x")
+        # self._initial_dof_pos[:, right_shoulder_x_handle] = 0.5 * np.pi
+        # self._initial_dof_pos[:, left_shoulder_x_handle] = -0.5 * np.pi
 
         self._initial_dof_vel = torch.zeros_like(self._dof_vel, device=self.device, dtype=torch.float)
         
@@ -201,22 +201,16 @@ class HumanoidAMPBase(VecTask):
         asset_options = gymapi.AssetOptions()
         asset_options.angular_damping = 0.01
         asset_options.max_angular_velocity = 100.0
-        asset_options.default_dof_drive_mode = gymapi.DOF_MODE_NONE
+        asset_options.default_dof_drive_mode = gymapi.DOF_MODE_EFFORT
         humanoid_asset = self.gym.load_asset(self.sim, asset_root, asset_file, asset_options)
-
-        actuator_props = self.gym.get_asset_actuator_properties(humanoid_asset)
-        motor_efforts = [prop.motor_effort for prop in actuator_props]
         
         # create force sensors at the feet
-        right_foot_idx = self.gym.find_asset_rigid_body_index(humanoid_asset, "right_foot")
-        left_foot_idx = self.gym.find_asset_rigid_body_index(humanoid_asset, "left_foot")
+        right_foot_idx = self.gym.find_asset_rigid_body_index(humanoid_asset, "right_ankle_pitch_link")
+        left_foot_idx = self.gym.find_asset_rigid_body_index(humanoid_asset, "left_ankle_pitch_link")
         sensor_pose = gymapi.Transform()
 
         self.gym.create_asset_force_sensor(humanoid_asset, right_foot_idx, sensor_pose)
         self.gym.create_asset_force_sensor(humanoid_asset, left_foot_idx, sensor_pose)
-
-        self.max_motor_effort = max(motor_efforts)
-        self.motor_efforts = to_torch(motor_efforts, device=self.device)
 
         self.torso_index = 0
         self.num_bodies = self.gym.get_asset_rigid_body_count(humanoid_asset)
@@ -239,6 +233,11 @@ class HumanoidAMPBase(VecTask):
             env_ptr = self.gym.create_env(self.sim, lower, upper, num_per_row)
             self._build_env(i, env_ptr, humanoid_asset)
             self.envs.append(env_ptr)
+        
+        # actuator_props = self.gym.get_actor_actuator_properties(self.envs[0], self.humanoid_handles[0])
+        # motor_efforts = [prop.motor_effort for prop in actuator_props]
+        # self.max_motor_effort = max(motor_efforts)
+        # self.motor_efforts = to_torch(motor_efforts, device=self.device)
 
         dof_prop = self.gym.get_actor_dof_properties(self.envs[0], self.humanoid_handles[0])
         for j in range(self.num_dof):
@@ -396,7 +395,8 @@ class HumanoidAMPBase(VecTask):
             pd_tar_tensor = gymtorch.unwrap_tensor(pd_tar)
             self.gym.set_dof_position_target_tensor(self.sim, pd_tar_tensor)
         else:
-            forces = self.actions * self.motor_efforts.unsqueeze(0) * self.power_scale
+            # forces = self.actions * self.motor_efforts.unsqueeze(0) * self.power_scale
+            forces = self.actions * self.power_scale
             force_tensor = gymtorch.unwrap_tensor(forces)
             self.gym.set_dof_actuation_force_tensor(self.sim, force_tensor)
 
@@ -504,10 +504,8 @@ class HumanoidAMPBase(VecTask):
 @torch.jit.script
 def dof_to_obs(pose):
     # type: (Tensor) -> Tensor
-    #dof_obs_size = 64
-    #dof_offsets = [0, 3, 6, 9, 12, 13, 16, 19, 20, 23, 24, 27, 30, 31, 34]
-    dof_obs_size = 52
-    dof_offsets = [0, 3, 6, 9, 10, 13, 14, 17, 18, 21, 24, 25, 28]
+    dof_obs_size = 37
+    dof_offsets = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38]
     num_joints = len(dof_offsets) - 1
 
     dof_obs_shape = pose.shape[:-1] + (dof_obs_size,)

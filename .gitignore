@@ -32,3 +32,6 @@ outputs/
 *.hydra*
 /isaacgymenvs/wandb
 .env
+assets/*
+images/
+isaacgymenvs/tasks/amp/poselib

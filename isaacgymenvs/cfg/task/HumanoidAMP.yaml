@@ -11,22 +11,22 @@ env:
   cameraFollow: True # if the camera follows humanoid or not
   enableDebugVis: False
   
-  pdControl: True
-  powerScale: 1.0
+  pdControl: False
+  powerScale: 10
   controlFrequencyInv: 2 # 30 Hz
   stateInit: "Random"
   hybridInitProb: 0.5
   numAMPObsSteps: 2
 
   localRootObs: False
-  contactBodies: ["right_foot", "left_foot"]
-  terminationHeight: 0.5
+  contactBodies: ["right_ankle_pitch_link", "right_ankle_roll_link", "left_ankle_pitch_link", "left_ankle_roll_link"]
+  terminationHeight: 0.2
   enableEarlyTermination: True
 
   # animation files to learn from
   # these motions should use hyperparameters from HumanoidAMPPPO.yaml
   #motion_file: "amp_humanoid_walk.npy"
-  motion_file: "amp_humanoid_run.npy"
+  motion_file: "g1/07_01_g1.npy"
   #motion_file: "amp_humanoid_dance.npy"
 
   # these motions should use hyperparameters from HumanoidAMPPPOLowGP.yaml
@@ -34,7 +34,7 @@ env:
   #motion_file: "amp_humanoid_backflip.npy"
 
   asset:
-    assetFileName: "mjcf/amp_humanoid.xml"
+    assetFileName: "unitree_g1/g1.urdf"
 
   plane:
     staticFriction: 1.0
